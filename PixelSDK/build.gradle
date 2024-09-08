@@ -82,49 +82,11 @@ def lastTag = getLastTag()
 def newVersion = incrementVersion(lastTag.startsWith('v') ? lastTag.substring(1) : lastTag)
 def changelog = generateChangelog(lastTag, "v${newVersion}")
 
-task createGitHubRelease {
+task openNewReleaseLink {
     doLast {
-        def githubToken = System.getenv('GITHUB_TOKEN')
-        if (githubToken == null || githubToken.isEmpty()) {
-            throw new GradleException("GITHUB_TOKEN environment variable is not set. Please set it with your GitHub personal access token.")
-        }
-
-        def releaseData = """
-        {
-            "tag_name": "v${newVersion}",
-            "name": "Release ${newVersion}",
-            "body": ${groovy.json.JsonOutput.toJson(changelog)},
-            "draft": false,
-            "prerelease": false
-        }
-        """
+        def encodedChangelog = java.net.URLEncoder.encode(changelog, "UTF-8")
+        def releaseUrl = "https://github.com/Scode-Njnjas/android-pixel-sdk/releases/new?tag=v${newVersion}&title=Release+${newVersion}&body=${encodedChangelog}&prerelease=true"
         
-        def process = ["curl", "-X", "POST", 
-                    "-H", "Accept: application/vnd.github.v3+json", 
-                    "-H", "Authorization: token ${githubToken}", 
-                    "-d", releaseData,
-                    "https://api.github.com/repos/Scode-Njnjas/android-pixel-sdk/releases"].execute()
-        
-        def outputStream = new StringBuffer()
-        def errorStream = new StringBuffer()
-        process.waitForProcessOutput(outputStream, errorStream)
-        
-        def output = outputStream.toString()
-        println "GitHub API Response: ${output}"
-        
-        def responseJson = new groovy.json.JsonSlurper().parseText(output)
-        if (responseJson.containsKey('html_url')) {
-            println "GitHub release created successfully: ${responseJson.html_url}"
-        } else {
-            println "Error creating GitHub release: ${output}"
-            throw new GradleException("Failed to create GitHub release. See error above.")
-        }
-    }
-}
-
-task openReleaseLink {
-    doLast {
-        def releaseUrl = "https://github.com/Scode-Njnjas/android-pixel-sdk/releases/tag/v${newVersion}"
         def os = System.getProperty("os.name").toLowerCase()
         def command
 
@@ -144,9 +106,9 @@ task openReleaseLink {
     }
 }
 
-task release(dependsOn: [createGitHubRelease, openReleaseLink]) {
+task release(dependsOn: [openNewReleaseLink]) {
     group = 'publishing'
-    description = 'Creates a new GitHub release and opens the release link'
+    description = 'Opens a new GitHub release page'
 }
 
 afterEvaluate {
@@ -162,5 +124,4 @@ afterEvaluate {
     }
 }
 
-createGitHubRelease.mustRunAfter publish
-openReleaseLink.mustRunAfter createGitHubRelease
+openNewReleaseLink.mustRunAfter publish
