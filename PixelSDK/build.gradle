@@ -143,3 +143,7 @@ afterEvaluate {
 }
 
 openNewReleaseLink.mustRunAfter publish
+
+println "Last Tag: ${lastTag}"
+println "New Version: ${newVersion}"
+println "Changelog: ${changelog}"
