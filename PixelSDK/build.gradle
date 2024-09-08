@@ -45,15 +45,122 @@ dependencies {
     implementation 'com.squareup.okhttp3:okhttp:3.4.1'
 }
 
+def getLastTag = { ->
+    def stdout = new ByteArrayOutputStream()
+    exec {
+        commandLine 'git', 'describe', '--tags', '--abbrev=0'
+        standardOutput = stdout
+    }
+    return stdout.toString().trim()
+}
+
+def incrementVersion = { lastVersion ->
+    def parts = lastVersion.split('\\.')
+    def major = parts[0]
+    def minor = parts[1]
+    def patch = Integer.parseInt(parts[2]) + 1
+    return "${major}.${minor}.${patch}"
+}
+
+def generateChangelog = { oldVersion, newVersion ->
+    def stdout = new ByteArrayOutputStream()
+    exec {
+        commandLine 'git', 'log', '--pretty=format:* %s ([%h](https://github.com/Scode-Njnjas/android-pixel-sdk/commit/%H))', "${oldVersion}..HEAD"
+        standardOutput = stdout
+    }
+    def changes = stdout.toString().trim()
+    return """## [${newVersion}](https://github.com/Scode-Njnjas/android-pixel-sdk/compare/${oldVersion}...${newVersion}) (${new Date().format('yyyy-MM-dd')})
+
+
+### Changes
+
+${changes}
+"""
+}
+
+def lastTag = getLastTag()
+def newVersion = incrementVersion(lastTag.startsWith('v') ? lastTag.substring(1) : lastTag)
+def changelog = generateChangelog(lastTag, "v${newVersion}")
+
+task createGitHubRelease {
+    doLast {
+        def githubToken = System.getenv('GITHUB_TOKEN')
+        if (githubToken == null || githubToken.isEmpty()) {
+            throw new GradleException("GITHUB_TOKEN environment variable is not set. Please set it with your GitHub personal access token.")
+        }
+
+        def releaseData = """
+        {
+            "tag_name": "v${newVersion}",
+            "name": "Release ${newVersion}",
+            "body": ${groovy.json.JsonOutput.toJson(changelog)},
+            "draft": false,
+            "prerelease": false
+        }
+        """
+        
+        def process = ["curl", "-X", "POST", 
+                    "-H", "Accept: application/vnd.github.v3+json", 
+                    "-H", "Authorization: token ${githubToken}", 
+                    "-d", releaseData,
+                    "https://api.github.com/repos/Scode-Njnjas/android-pixel-sdk/releases"].execute()
+        
+        def outputStream = new StringBuffer()
+        def errorStream = new StringBuffer()
+        process.waitForProcessOutput(outputStream, errorStream)
+        
+        def output = outputStream.toString()
+        println "GitHub API Response: ${output}"
+        
+        def responseJson = new groovy.json.JsonSlurper().parseText(output)
+        if (responseJson.containsKey('html_url')) {
+            println "GitHub release created successfully: ${responseJson.html_url}"
+        } else {
+            println "Error creating GitHub release: ${output}"
+            throw new GradleException("Failed to create GitHub release. See error above.")
+        }
+    }
+}
+
+task openReleaseLink {
+    doLast {
+        def releaseUrl = "https://github.com/Scode-Njnjas/android-pixel-sdk/releases/tag/v${newVersion}"
+        def os = System.getProperty("os.name").toLowerCase()
+        def command
+
+        if (os.contains("win")) {
+            command = "cmd /c start ${releaseUrl}"
+        } else if (os.contains("mac")) {
+            command = "open ${releaseUrl}"
+        } else if (os.contains("nix") || os.contains("nux") || os.contains("bsd")) {
+            command = "xdg-open ${releaseUrl}"
+        } else {
+            throw new GradleException("Unsupported operating system: ${os}")
+        }
+
+        exec {
+            commandLine command.split(" ")
+        }
+    }
+}
+
+task release(dependsOn: [createGitHubRelease, openReleaseLink]) {
+    group = 'publishing'
+    description = 'Creates a new GitHub release and opens the release link'
+}
+
 afterEvaluate {
     publishing {
         publications {
             release(MavenPublication) {
                 from components.release
-                groupId 'com.github.convertedin'
+                groupId 'com.github.Scode-Njnjas'
                 artifactId 'android-pixel-sdk'
-                version '1.0.0'
+                version newVersion
             }
         }
     }
 }
+
+createGitHubRelease.mustRunAfter publish
+openReleaseLink.mustRunAfter createGitHubRelease
