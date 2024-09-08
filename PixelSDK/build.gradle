@@ -51,29 +51,32 @@ def getPackageVersion() {
 
 def getLastTag = { ->
     def stdout = new ByteArrayOutputStream()
-    exec {
+    def result = exec {
         commandLine 'git', 'describe', '--tags', '--abbrev=0'
+        standardOutput = stdout
+        ignoreExitValue true
+    }
+    return result.exitValue == 0 ? stdout.toString().trim() : null
+}
+
+def getLastCommitHash = { ->
+    def stdout = new ByteArrayOutputStream()
+    exec {
+        commandLine 'git', 'rev-parse', 'HEAD'
         standardOutput = stdout
     }
     return stdout.toString().trim()
 }
 
-def incrementVersion = { lastVersion ->
-    def parts = lastVersion.split('\\.')
-    def major = parts[0]
-    def minor = parts[1]
-    def patch = Integer.parseInt(parts[2]) + 1
-    return "${major}.${minor}.${patch}"
-}
-
 def generateChangelog = { oldVersion, newVersion ->
+    def comparePoint = oldVersion ?: getLastCommitHash()
     def stdout = new ByteArrayOutputStream()
     exec {
-        commandLine 'git', 'log', '--pretty=format:* %s ([%h](https://github.com/Scode-Njnjas/android-pixel-sdk/commit/%H))', "${oldVersion}..HEAD"
+        commandLine 'git', 'log', '--pretty=format:* %s ([%h](https://github.com/Scode-Njnjas/android-pixel-sdk/commit/%H))', "${comparePoint}..HEAD"
         standardOutput = stdout
     }
     def changes = stdout.toString().trim()
-    return """## [${newVersion}](https://github.com/Scode-Njnjas/android-pixel-sdk/compare/${oldVersion}...${newVersion}) (${new Date().format('yyyy-MM-dd')})
+    return """## [${newVersion}](https://github.com/Scode-Njnjas/android-pixel-sdk/compare/${oldVersion ?: comparePoint}...${newVersion}) (${new Date().format('yyyy-MM-dd')})
 
 
 ### Changes
@@ -87,7 +90,9 @@ def packageVersion = getPackageVersion()
 def newVersion = packageVersion
 
 if (lastTag == "v${packageVersion}") {
-    newVersion = incrementVersion(packageVersion)
+    def parts = packageVersion.split('\\.')
+    def patch = Integer.parseInt(parts[2]) + 1
+    newVersion = "${parts[0]}.${parts[1]}.${patch}"
     println "Warning: Package version (${packageVersion}) already exists as a tag. Incrementing to ${newVersion}."
 } else {
     println "Using package version: ${packageVersion}"
