@@ -92,8 +92,14 @@ def newVersion = packageVersion
 if (lastTag == "v${packageVersion}") {
     newVersion = incrementVersion(packageVersion)
     println "Warning: Package version (${packageVersion}) already exists as a tag. Incrementing to ${newVersion}."
+} else if (lastTag != null) {
+    def lastTagVersion = lastTag.startsWith("v") ? lastTag.substring(1) : lastTag
+    if (incrementVersion(lastTagVersion) != packageVersion) {
+        newVersion = incrementVersion(lastTagVersion)
+        println "Warning: Last tag (${lastTag}) is different from package version (${packageVersion}). Using ${newVersion} as the new version."
+    }
 } else {
-    println "Using package version: ${packageVersion}"
+    println "No previous tag found. Using package version: ${packageVersion}"
 }
 
 def changelog = generateChangelog(lastTag, "v${newVersion}")
