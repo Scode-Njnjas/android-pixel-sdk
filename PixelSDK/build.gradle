@@ -2,7 +2,6 @@ plugins {
     id 'com.android.library'
     id 'org.jetbrains.kotlin.android'
     id 'kotlin-android'
-    id 'maven-publish'
 }
 
 android {
@@ -14,7 +13,7 @@ android {
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles "consumer-rules.pro"
-        versionName "1.0.1" // Set your desired version here
+        versionName "1.0.1" // Make sure this is set to your current version
     }
 
     buildTypes {
@@ -47,7 +46,7 @@ dependencies {
 }
 
 def getPackageVersion() {
-    return project.android.defaultConfig.versionName
+    return android.defaultConfig.versionName
 }
 
 def getLastTag() {
@@ -128,21 +127,6 @@ task release(dependsOn: [createGitHubRelease]) {
     group = 'publishing'
     description = 'Creates a new GitHub release'
 }
-
-afterEvaluate {
-    publishing {
-        publications {
-            release(MavenPublication) {
-                from components.release
-                groupId 'com.github.Scode-Njnjas'
-                artifactId 'android-pixel-sdk'
-                version newVersion
-            }
-        }
-    }
-}
-
-openNewReleaseLink.mustRunAfter publish
 
 println "Last Tag: ${lastTag}"
 println "Package Version: ${packageVersion}"
