@@ -14,6 +14,7 @@ android {
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles "consumer-rules.pro"
+        versionName "1.0.1" // Set your desired version here
     }
 
     buildTypes {
@@ -46,7 +47,7 @@ dependencies {
 }
 
 def getPackageVersion() {
-    return android.defaultConfig.versionName
+    return project.android.defaultConfig.versionName ?: "1.0.0" // Provide a default version if not set
 }
 
 def getLastTag = { ->
@@ -59,13 +60,12 @@ def getLastTag = { ->
     return result.exitValue == 0 ? stdout.toString().trim() : null
 }
 
-def getLastCommitHash = { ->
-    def stdout = new ByteArrayOutputStream()
-    exec {
-        commandLine 'git', 'rev-parse', 'HEAD'
-        standardOutput = stdout
-    }
-    return stdout.toString().trim()
+def incrementVersion = { currentVersion ->
+    def parts = currentVersion.split('\\.')
+    def major = parts[0]
+    def minor = parts[1]
+    def patch = Integer.parseInt(parts[2]) + 1
+    return "${major}.${minor}.${patch}"
 }
 
 def generateChangelog = { oldVersion, newVersion ->
@@ -90,9 +90,7 @@ def packageVersion = getPackageVersion()
 def newVersion = packageVersion
 
 if (lastTag == "v${packageVersion}") {
-    def parts = packageVersion.split('\\.')
-    def patch = Integer.parseInt(parts[2]) + 1
-    newVersion = "${parts[0]}.${parts[1]}.${patch}"
+    newVersion = incrementVersion(packageVersion)
     println "Warning: Package version (${packageVersion}) already exists as a tag. Incrementing to ${newVersion}."
 } else {
     println "Using package version: ${packageVersion}"
@@ -145,5 +143,6 @@ afterEvaluate {
 openNewReleaseLink.mustRunAfter publish
 
 println "Last Tag: ${lastTag}"
+println "Package Version: ${packageVersion}"
 println "New Version: ${newVersion}"
 println "Changelog: ${changelog}"
