@@ -2,6 +2,7 @@ plugins {
     id 'com.android.library'
     id 'org.jetbrains.kotlin.android'
     id 'kotlin-android'
+    id 'maven-publish'
 }
 
 android {
@@ -13,7 +14,6 @@ android {
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles "consumer-rules.pro"
-        versionName "1.0.1" // Make sure this is set to your current version
     }
 
     buildTypes {
@@ -40,95 +40,19 @@ dependencies {
     implementation("com.squareup.retrofit2:retrofit:2.9.0")
     implementation("com.squareup.retrofit2:adapter-rxjava2:2.9.0")
     implementation("com.squareup.retrofit2:converter-gson:2.9.0")
-
-    implementation 'com.squareup.okhttp3:logging-interceptor:3.4.1'
-    implementation 'com.squareup.okhttp3:okhttp:3.4.1'
+    implementation('com.squareup.okhttp3:logging-interceptor:4.12.0')
+    implementation('com.squareup.okhttp3:okhttp:4.12.0')
 }
 
-def getPackageVersion() {
-    return android.defaultConfig.versionName
-}
-
-def getLastTag() {
-    def stdout = new ByteArrayOutputStream()
-    def result = exec {
-        commandLine 'git', 'describe', '--tags', '--abbrev=0'
-        standardOutput = stdout
-        ignoreExitValue true
-    }
-    return result.exitValue == 0 ? stdout.toString().trim() : null
-}
-
-def incrementVersion(currentVersion) {
-    def parts = currentVersion.split('\\.')
-    def major = parts[0]
-    def minor = parts[1]
-    def patch = Integer.parseInt(parts[2]) + 1
-    return "${major}.${minor}.${patch}"
-}
-
-def generateChangelog(comparePoint, newVersion) {
-    def stdout = new ByteArrayOutputStream()
-    exec {
-        commandLine 'git', 'log', '--pretty=format:* %s ([%h](https://github.com/Scode-Njnjas/android-pixel-sdk/commit/%H))', "${comparePoint}..HEAD"
-        standardOutput = stdout
-    }
-    def changes = stdout.toString().trim()
-    return """## [${newVersion}](https://github.com/Scode-Njnjas/android-pixel-sdk/compare/${comparePoint}...v${newVersion}) (${new Date().format('yyyy-MM-dd')})
-
-### Changes
-
-${changes}
-"""
-}
-
-def lastTag = getLastTag()
-def packageVersion = getPackageVersion()
-def newVersion = packageVersion
-
-if (lastTag == "v${packageVersion}") {
-    newVersion = incrementVersion(packageVersion)
-    println "Warning: Package version (${packageVersion}) already exists as a tag. Incrementing to ${newVersion}."
-} else if (lastTag != null) {
-    def lastTagVersion = lastTag.startsWith("v") ? lastTag.substring(1) : lastTag
-    if (incrementVersion(lastTagVersion) != packageVersion) {
-        newVersion = incrementVersion(lastTagVersion)
-        println "Warning: Last tag (${lastTag}) is different from package version (${packageVersion}). Using ${newVersion} as the new version."
-    }
-} else {
-    println "No previous tag found. Using package version: ${packageVersion}"
-}
-
-def changelog = generateChangelog(lastTag ?: "HEAD", newVersion)
-
-task createGitHubRelease(type: Exec) {
-    doLast {
-        def encodedChangelog = java.net.URLEncoder.encode(changelog, "UTF-8")
-        def releaseUrl = "https://github.com/Scode-Njnjas/android-pixel-sdk/releases/new?tag=v${newVersion}&title=Release+${newVersion}&body=${encodedChangelog}"
-        
-        def os = System.getProperty("os.name").toLowerCase()
-        def command
-
-        if (os.contains("win")) {
-            command = "cmd /c start ${releaseUrl}"
-        } else if (os.contains("mac")) {
-            command = "open ${releaseUrl}"
-        } else if (os.contains("nix") || os.contains("nux") || os.contains("bsd")) {
-            command = "xdg-open ${releaseUrl}"
-        } else {
-            throw new GradleException("Unsupported operating system: ${os}")
+afterEvaluate {
+    publishing {
+        publications {
+            release(MavenPublication) {
+                from components.release
+                groupId 'com.github.convertedin'
+                artifactId 'android-pixel-sdk'
+                version '1.0.2'
+            }
         }
-
-        commandLine command.split(" ")
     }
 }
-
-task release(dependsOn: [createGitHubRelease]) {
-    group = 'publishing'
-    description = 'Creates a new GitHub release'
-}
-
-println "Last Tag: ${lastTag}"
-println "Package Version: ${packageVersion}"
-println "New Version: ${newVersion}"
-println "Changelog: ${changelog}"
